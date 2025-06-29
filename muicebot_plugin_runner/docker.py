@@ -1,12 +1,14 @@
-import aiodocker
-import re
-from .config import config
-from pathlib import Path
-from nonebot import logger
-from muicebot.models import Resource
-from asyncio import wait_for
-import tarfile
 import io
+import re
+import tarfile
+from asyncio import wait_for
+from pathlib import Path
+
+import aiodocker
+from muicebot.models import Resource
+from nonebot import logger
+
+from .config import config
 from .utils import convert_path_to_wsl
 
 SANDBOX_PATH = Path(__file__).parent / "sandbox"
@@ -15,9 +17,10 @@ DOCKERFILE_PATH = SANDBOX_PATH / "Dockerfile"
 IMAGE_TAG = "muicebot/sandbox-python"
 IMAGE_VERSION = "v1.1"
 
+
 class Sandbox:
     def __init__(self) -> None:
-        self.client = aiodocker.Docker(url = config.runner_docker_base_url)
+        self.client = aiodocker.Docker(url=config.runner_docker_base_url)
 
     def _build_context(self, base_dir: Path) -> io.BytesIO:
         """
@@ -47,8 +50,8 @@ class Sandbox:
 
         :param total_retry: 最高重试次数
         """
-        for image in (await self.client.images.list()):
-            tag = image['RepoTags'][0] if image['RepoTags'] else ''
+        for image in await self.client.images.list():
+            tag = image["RepoTags"][0] if image["RepoTags"] else ""
             if tag == f"{IMAGE_TAG}:{IMAGE_VERSION}":
                 logger.debug("Skip build image")
                 return
@@ -58,11 +61,11 @@ class Sandbox:
         ctx_tar = self._build_context(SANDBOX_PATH)
 
         build_logs = self.client.images.build(
-                fileobj=ctx_tar,
-                encoding="gzip",
-                tag=f"{IMAGE_TAG}:{IMAGE_VERSION}",
-                stream=True
-            )
+            fileobj=ctx_tar,
+            encoding="gzip",
+            tag=f"{IMAGE_TAG}:{IMAGE_VERSION}",
+            stream=True,
+        )
 
         logger.debug("Build logs:")
         async for line in build_logs:
@@ -71,18 +74,20 @@ class Sandbox:
 
             logger.debug(line["stream"].strip())
 
-            if not("Exception" in line["stream"] or "Error" in line["stream"]):
+            if not ("Exception" in line["stream"] or "Error" in line["stream"]):
                 continue
 
             logger.error("Docker 镜像构建失败！")
             if not total_retry:
                 raise RuntimeError("镜像构建失败！")
-            
-            logger.warning(f"正在重试...")
+
+            logger.warning("正在重试...")
             await self._build_image(total_retry - 1)
             return
 
-    def _extract_output_file(self, container_log:str, exec_dir: Path) -> list[Resource]:
+    def _extract_output_file(
+        self, container_log: str, exec_dir: Path
+    ) -> list[Resource]:
         """
         提取输出文件
         """
@@ -93,9 +98,7 @@ class Sandbox:
         output_files = pattern.findall(container_log)
         outputs = []
         for output in output_files:
-            outputs.append(
-                Resource("file", path = exec_dir / output)
-            )
+            outputs.append(Resource("file", path=exec_dir / output))
 
         return outputs
 
@@ -111,16 +114,18 @@ class Sandbox:
             logger.debug("Creating container...")
 
             host_path = convert_path_to_wsl(exec_dir)
-            container = await self.client.containers.create({
-                "Image": f"{IMAGE_TAG}:{IMAGE_VERSION}",
-                "HostConfig": {
-                    "Binds": [f"{host_path}:/workspace:rw"],
-                    "AutoRemove": False,
-                    "NetworkMode": config.runner_container_networkmode,
-                    "Memory": 128 * 1024 * 1024,  # 128M
-                    "PidsLimit": 32  # 32 个进程
+            container = await self.client.containers.create(
+                {
+                    "Image": f"{IMAGE_TAG}:{IMAGE_VERSION}",
+                    "HostConfig": {
+                        "Binds": [f"{host_path}:/workspace:rw"],
+                        "AutoRemove": False,
+                        "NetworkMode": config.runner_container_networkmode,
+                        "Memory": 128 * 1024 * 1024,  # 128M
+                        "PidsLimit": 32,  # 32 个进程
+                    },
                 }
-            })
+            )
 
             logger.debug("Starting container...")
             await container.start()
@@ -128,15 +133,21 @@ class Sandbox:
             logger.debug("Waiting for container to finish...")
             try:
                 # 等待容器退出
-                result = await wait_for(container.wait(), config.runner_container_waitfor)
-                logger.debug(f"Container exit code: {result.get('StatusCode', 'unknown')}")
+                result = await wait_for(
+                    container.wait(), config.runner_container_waitfor
+                )
+                logger.debug(
+                    f"Container exit code: {result.get('StatusCode', 'unknown')}"
+                )
             except TimeoutError:
-                logger.debug("Container execution timed out, trying to get logs anyway...")
+                logger.debug(
+                    "Container execution timed out, trying to get logs anyway..."
+                )
                 # 如果超时，尝试停止容器
                 try:
                     await container.kill()
                 except Exception as e:
-                    pass
+                    logger.warning(f"无法关闭容器或容器已关闭: {e}")
 
             logger.debug("Getting container logs...")
             logs = await container.log(stdout=True, stderr=True)
@@ -146,10 +157,10 @@ class Sandbox:
             logger.debug("容器执行结果:")
             logger.debug(log)
             logger.debug(f"输出的文件:{outputs}")
-            
+
             await container.delete()
             return log, outputs
-        
+
         except TimeoutError:
             return "❌ Error: 容器操作超时...", []
 

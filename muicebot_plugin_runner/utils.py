@@ -1,7 +1,9 @@
-from io import BytesIO
-from muicebot.models import Resource
-from pathlib import Path
 import platform
+from io import BytesIO
+from pathlib import Path
+
+from muicebot.models import Resource
+
 
 def read_attachment(file: Resource) -> bytes:
     """
@@ -14,7 +16,8 @@ def read_attachment(file: Resource) -> bytes:
         return file_obj.read()
     else:
         return file_obj
-    
+
+
 def convert_path_to_wsl(path: Path) -> str:
     path = path.resolve()
     if platform.system() == "Windows":
