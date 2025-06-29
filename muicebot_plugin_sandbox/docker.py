@@ -20,7 +20,7 @@ IMAGE_VERSION = "v1.1"
 
 class Sandbox:
     def __init__(self) -> None:
-        self.client = aiodocker.Docker(url=config.runner_docker_base_url)
+        self.client = aiodocker.Docker(url=config.sandbox_docker_base_url)
 
     def _build_context(self, base_dir: Path) -> io.BytesIO:
         """
@@ -120,7 +120,7 @@ class Sandbox:
                     "HostConfig": {
                         "Binds": [f"{host_path}:/workspace:rw"],
                         "AutoRemove": False,
-                        "NetworkMode": config.runner_container_networkmode,
+                        "NetworkMode": config.sandbox_container_networkmode,
                         "Memory": 128 * 1024 * 1024,  # 128M
                         "PidsLimit": 32,  # 32 个进程
                     },
@@ -134,7 +134,7 @@ class Sandbox:
             try:
                 # 等待容器退出
                 result = await wait_for(
-                    container.wait(), config.runner_container_waitfor
+                    container.wait(), config.sandbox_container_waitfor
                 )
                 logger.debug(
                     f"Container exit code: {result.get('StatusCode', 'unknown')}"
