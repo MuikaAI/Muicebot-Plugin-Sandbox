@@ -4,6 +4,7 @@ from typing import Optional
 
 from muicebot.llm import ModelCompletions, ModelRequest
 from muicebot.models import Message, Resource
+from muicebot.plugin import PluginMetadata
 from muicebot.plugin.func_call import on_function_call
 from muicebot.plugin.hook import (
     on_after_completion,
@@ -14,8 +15,16 @@ from nonebot import get_driver
 from nonebot.adapters import Event
 from pydantic import BaseModel, Field
 
+from .config import Config
 from .docker import Sandbox
 from .utils import read_attachment
+
+__plugin_meta__ = PluginMetadata(
+    name="Muicebot-Plugin-Sandbox",
+    description="基于 Docker 容器的 Muicebot Function Call 插件，可让 LLM 在沙盒中执行 Python 代码",
+    usage="配置好 Docker 环境即可",
+    config=Config,
+)
 
 _file_ids: dict[str, dict[str, Resource]] = {}
 """文件 IDs 存储字典"""
