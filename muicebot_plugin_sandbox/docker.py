@@ -16,7 +16,7 @@ SANDBOX_PATH = Path(__file__).parent / "sandbox"
 DOCKERFILE_PATH = SANDBOX_PATH / "Dockerfile"
 
 IMAGE_TAG = "muicebot/sandbox-python"
-IMAGE_VERSION = "v1.1"
+IMAGE_VERSION = "v1.2"
 
 
 class Sandbox:
