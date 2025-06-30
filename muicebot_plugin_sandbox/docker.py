@@ -3,6 +3,7 @@ import re
 import tarfile
 from asyncio import wait_for
 from pathlib import Path
+from time import perf_counter
 
 import aiodocker
 from muicebot.models import Resource
@@ -50,10 +51,12 @@ class Sandbox:
 
         :param total_retry: 最高重试次数
         """
+        logger.debug("正在检查是否需要构建 Docker Sandbox 镜像...")
+
         for image in await self.client.images.list():
             tag = image["RepoTags"][0] if image["RepoTags"] else ""
             if tag == f"{IMAGE_TAG}:{IMAGE_VERSION}":
-                logger.debug("Skip build image")
+                logger.debug("检测到沙盒镜像存在，无需构建")
                 return
 
         logger.info("Building Docker image...")
@@ -111,7 +114,7 @@ class Sandbox:
         await self._build_image()
 
         try:
-            logger.debug("Creating container...")
+            logger.info("正在创建一次性容器...")
 
             host_path = convert_path_to_wsl(exec_dir)
             container = await self.client.containers.create(
@@ -127,12 +130,12 @@ class Sandbox:
                 }
             )
 
-            logger.debug("Starting container...")
+            logger.info("启动一次性容器...")
             await container.start()
 
-            logger.debug("Waiting for container to finish...")
+            logger.info("正等待容器执行完成...")
+            start_time = perf_counter()
             try:
-                # 等待容器退出
                 result = await wait_for(
                     container.wait(), config.sandbox_container_waitfor
                 )
@@ -140,24 +143,26 @@ class Sandbox:
                     f"Container exit code: {result.get('StatusCode', 'unknown')}"
                 )
             except TimeoutError:
-                logger.debug(
-                    "Container execution timed out, trying to get logs anyway..."
-                )
+                logger.warning("容器执行超时，强行退出...")
                 # 如果超时，尝试停止容器
                 try:
                     await container.kill()
                 except Exception as e:
                     logger.warning(f"无法关闭容器或容器已关闭: {e}")
+            end_time = perf_counter()
 
-            logger.debug("Getting container logs...")
+            logger.debug(
+                f"容器执行完成，用时 {end_time - start_time}s, 正在获取容器日志"
+            )
             logs = await container.log(stdout=True, stderr=True)
-            log = "".join(logs) if logs else ""
+            log = "".join(logs) if logs else "(容器无返回或容器执行超时)"
             outputs = self._extract_output_file(log, exec_dir)
 
             logger.debug("容器执行结果:")
             logger.debug(log)
             logger.debug(f"输出的文件:{outputs}")
 
+            logger.debug("删除一次性容器...")
             await container.delete()
             return log, outputs
 

@@ -1,5 +1,8 @@
 import tempfile
+from os import listdir
 from pathlib import Path
+from shutil import rmtree
+from time import perf_counter
 from typing import Optional
 
 from muicebot.llm import ModelCompletions, ModelRequest
@@ -11,7 +14,7 @@ from muicebot.plugin.hook import (
     on_before_completion,
     on_before_pretreatment,
 )
-from nonebot import get_driver
+from nonebot import get_driver, logger
 from nonebot.adapters import Event
 from pydantic import BaseModel, Field
 
@@ -70,6 +73,10 @@ async def run_python_code(
     assert sandbox_manager
     session_id = event.get_session_id()
 
+    logger.info("AI 请求运行沙盒代码:")
+    logger.info(code)
+
+    logger.debug("构建 Docker 上下文目录...")
     exec_dir = Path(tempfile.mkdtemp(prefix="sandbox_"))
 
     # write code
@@ -86,16 +93,28 @@ async def run_python_code(
         content = read_attachment(file)
         (attachments_dir / file_id).write_bytes(content)
 
+    logger.debug(f"收集到的附件列表: {listdir(attachments_dir)}")
+
     # write requirements.txt
     if requirements:
         requirements_data = "\n".join(requirements)
         requirements_file = exec_dir / "requirements.txt"
         requirements_file.write_text(requirements_data, encoding="utf-8")
 
+        logger.debug(f"需要的额外依赖{';'.join(requirements)}")
+
+    logger.debug("开始进行沙盒操作...")
+    start_time = perf_counter()
     result, files = await sandbox_manager.run_sandbox(exec_dir)
+    end_time = perf_counter()
+    logger.success(f"沙盒容器执行完成, 总用时: {end_time - start_time}s")
+
     if files:
         session_id = event.get_session_id()
         _output_files[session_id] = files
+
+    # Remove tempdir
+    rmtree(exec_dir, ignore_errors=True)
 
     return result
 
