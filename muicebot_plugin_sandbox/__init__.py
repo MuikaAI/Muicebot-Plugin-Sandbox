@@ -86,7 +86,7 @@ async def run_python_code(
     attachments_dir = exec_dir / "attachments"
     attachments_dir.mkdir(exist_ok=True)
     for file_id in file_ids or []:
-        if file_id not in _file_ids[session_id].keys():
+        if file_id not in _file_ids.setdefault(session_id, {}).keys():
             return "Files ID 不存在！"
 
         file = _file_ids[session_id][file_id]
